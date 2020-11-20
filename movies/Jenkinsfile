@@ -1,28 +1,20 @@
 pipeline {
     options {
-        // set a timeout of 60 minutes for this pipeline
         timeout(time: 60, unit: 'MINUTES')
     }
     agent {
       node {
-        //TODO: Add label for the Maven jenkins agent
+        label 'maven'
       }
     }
-
     environment {
-        //TODO: Customize these variables for your environment
-        DEV_PROJECT = "youruser-movies-dev"
-        STAGE_PROJECT = "youruser-movies-stage"
-        APP_GIT_URL = "https://github.com/youruser/DO288-apps"
+        DEV_PROJECT = "thierry-doucet-movies-dev"
+        STAGE_PROJECT = "thierry-doucet-movies-stage"
+        APP_GIT_URL = "https://github.com/thierry-doucet/DO288-apps"
         NEXUS_SERVER = "http://nexus-common.apps.cluster.domain.example.com/repository/java"
-
-        // DO NOT CHANGE THE GLOBAL VARS BELOW THIS LINE
         APP_NAME = "movies"
     }
-
-
     stages {
-
         stage('Compilation Check') {
             steps {
                 echo '### Checking for compile errors ###'
@@ -32,37 +24,33 @@ pipeline {
                    '''
             }
         }
-
         stage('Run Unit Tests') {
             steps {
                 echo '### Running unit tests ###'
                 sh '''
                         cd ${APP_NAME}
-                        mvn -s settings.xml -B clean test
+                        mvn -s settings.xml -B test
                    '''
             }
         }
-
         stage('Static Code Analysis') {
             steps {
                 echo '### Running pmd on code ###'
                 sh '''
                         cd ${APP_NAME}
-                        mvn -s settings.xml -B clean pmd:check
+                        mvn -s settings.xml -B pmd:check
                    '''
             }
         }
-
         stage('Create fat JAR') {
             steps {
                 echo '### Creating fat JAR ###'
                 sh '''
                         cd ${APP_NAME}
-                        mvn -s settings.xml -B clean package -DskipTests=true
+                        mvn -s settings.xml -B package -DskipTests=true
                    '''
             }
         }
-
         stage('Launch new app in DEV env') {
             steps {
                 echo '### Cleaning existing resources in DEV env ###'
@@ -72,7 +60,6 @@ pipeline {
                         sleep 5
                         oc new-build java:8 --name=${APP_NAME} --binary=true -n ${DEV_PROJECT}
                    '''
-
                 echo '### Creating a new app in DEV env ###'
                 script {
                     openshift.withCluster() {
@@ -81,15 +68,25 @@ pipeline {
                       }
                     }
                 }
-                // TODO: Create a new OpenShift application based on the ${APP_NAME}:latest image stream
-                // TODO: Expose the ${APP_NAME} service for external access
+                sh '''  
+                        oc new-app  --as-deployment-config ${APP_NAME}:latest -n ${DEV_PROJECT}
+                        oc expose svc/${APP_NAME} -n ${DEV_PROJECT}
+                   '''
             }
         }
-
         stage('Wait for deployment in DEV env') {
-            //TODO: Watch deployment until pod is in 'Running' state
+            steps {
+                script {
+                    openshift.withCluster() {
+                        openshift.withProject( "${DEV_PROJECT}" ) {
+                            openshift.selector("dc", "${APP_NAME}").related('pods').untilEach(1) {
+                                return (it.object().status.phase == "Running")
+                            }
+                        }
+                    }
+                }
+            }
         }
-
         stage('Promote to Staging Env') {
             steps {
                 timeout(time: 60, unit: 'MINUTES') {
@@ -97,12 +94,11 @@ pipeline {
                 }
                 script {
                     openshift.withCluster() {
-                    // TODO: Tag the ${APP_NAME}:latest image stream in the dev env as ${APP_NAME}:stage in staging
+                        openshift.tag("${DEV_PROJECT}/${APP_NAME}:latest", "${STAGE_PROJECT}/${APP_NAME}:stage")
                     }
                 }
             }
         }
-
         stage('Deploy to Staging Env') {
             steps {
                 echo '### Cleaning existing resources in Staging ###'
@@ -111,19 +107,19 @@ pipeline {
                         oc delete all -l app=${APP_NAME}
                         sleep 5
                    '''
-
                 echo '### Creating a new app in Staging ###'
-                // TODO: Create a new app in staging and expose the service
+                sh '''
+                        oc project ${STAGE_PROJECT}
+                        oc new-app  --as-deployment-config --name ${APP_NAME} -i ${APP_NAME}:stage
+                        oc expose svc/${APP_NAME}
+                   '''
             }
         }
-
         stage('Wait for deployment in Staging') {
             steps {
                 sh "oc get route ${APP_NAME} -n ${STAGE_PROJECT} -o jsonpath='{ .spec.host }' --loglevel=4 > routehost"
-
                 script {
                     routeHost = readFile('routehost').trim()
-
                     openshift.withCluster() {
                         openshift.withProject( "${STAGE_PROJECT}" ) {
                             def deployment = openshift.selector("dc", "${APP_NAME}").rollout()
