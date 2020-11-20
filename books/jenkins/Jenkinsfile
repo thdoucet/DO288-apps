@@ -131,9 +131,6 @@ pipeline {
                 }
             }
         }
-        stage('Wait for deployment in Staging') {
-
-        }
     }
     post {
         success {
