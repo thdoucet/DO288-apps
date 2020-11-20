@@ -2,7 +2,6 @@ package com.redhat.movies;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.io.File;
 
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -12,15 +11,13 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/")
 public class MoviesController {
 
-    private List<Movie> movies;
-    private String status = "OK";
-    private String flag = "READY";
+    private static final String status = "OK";
 
     @GetMapping("/movies")
     public List<Movie> getAllMovies() {
+        List<Movie> movies = new ArrayList<Movie>();
 
         //Generate fake static data
-        movies = new ArrayList<Movie>();
         movies.add(new Movie(1,"The Godfather","Crime/Thriller"));
         movies.add(new Movie(2,"Star Wars","Sci-Fi"));
         movies.add(new Movie(3,"The Mask","Comedy"));
@@ -35,5 +32,4 @@ public class MoviesController {
     public String getStatus() {
         return status;
     }
-
 }
