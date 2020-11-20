@@ -61,6 +61,7 @@ pipeline {
                         oc new-build java:8 --name=${APP_NAME} --binary=true -n ${DEV_PROJECT}
                    '''
                 echo '### Creating a new app in DEV env ###'
+                echo '### -> Build config ###'
                 script {
                     openshift.withCluster() {
                       openshift.withProject(env.DEV_PROJECT) {
@@ -68,10 +69,14 @@ pipeline {
                       }
                     }
                 }
+                echo '### -> new-app ###'
                 sh '''  
-                        oc new-app  --as-deployment-config ${APP_NAME}:latest -n ${DEV_PROJECT}
-                        oc expose svc/${APP_NAME} -n ${DEV_PROJECT}
+                        oc new-app --as-deployment-config ${APP_NAME}:latest -n ${DEV_PROJECT}
                    '''
+                echo '### -> expose svc ###'
+                sh '''
+                        oc expose svc/${APP_NAME} -n ${DEV_PROJECT}
+                   '''  
             }
         }
         stage('Wait for deployment in DEV env') {
